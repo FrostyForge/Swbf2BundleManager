@@ -28,6 +28,7 @@ using System.Windows.Markup;
 using DuplicationPlugin;
 using System.Windows.Documents;
 using static DuplicationPlugin.DuplicationTool;
+using System.Runtime.CompilerServices;
 
 namespace BundleManager
 {
@@ -51,7 +52,11 @@ namespace BundleManager
         private Dictionary<EbxAssetEntry, List<EbxAssetEntry>> assetsToBM = new Dictionary<EbxAssetEntry, List<EbxAssetEntry>>();
         private Dictionary<EbxAssetEntry, List<ChunkAssetEntry>> soundwaveSpecialCase = new Dictionary<EbxAssetEntry, List<ChunkAssetEntry>>();
         private Dictionary<EbxAssetEntry, MeshVariData> meshassetSpecialCase = new Dictionary<EbxAssetEntry, MeshVariData>();
+        private Dictionary<EbxAssetEntry, List<ResAssetEntry>> textureMappingSpecialCase = new Dictionary<EbxAssetEntry, List<ResAssetEntry>>();
         Dictionary<EbxAssetEntry, Dictionary<EbxAssetEntry, MeshVariData>> ModifiedObjectVariations = new Dictionary<EbxAssetEntry, Dictionary<EbxAssetEntry, MeshVariData>>();
+
+        private bool hasMissedTextureResCache = false;
+        private Dictionary<ResAssetEntry, EbxAssetEntry> uncachedTextureResMappings = new Dictionary<ResAssetEntry, EbxAssetEntry>();
 
         private Dictionary<EbxAssetEntry, Dictionary<int, EbxAssetEntry>> mvdbsToUpdate = new Dictionary<EbxAssetEntry, Dictionary<int, EbxAssetEntry>>();
 
@@ -413,7 +418,7 @@ namespace BundleManager
                         DependencyDetector(parEntry);
 
                     string type = "null";
-                    foreach (string uniqueTypes in new List<string> { "SoundWaveAsset", "MeshAsset", "ObjectVariation", "SpatialPrefabBlueprint" })
+                    foreach (string uniqueTypes in new List<string> { "SoundWaveAsset", "MeshAsset", "ObjectVariation", "SpatialPrefabBlueprint", "UITextureMappingAsset" })
                     {
                         if (TypeLibrary.IsSubClassOf(parEntry.Type, uniqueTypes))
                             type = uniqueTypes;
@@ -424,6 +429,7 @@ namespace BundleManager
                         case "MeshAsset": MeshAssetDatabaseDetector(parEntry); break;
                         case "ObjectVariation": ObjectVariationDatabaseDetector(parEntry); break;
                         case "SpatialPrefabBlueprint": FullDependencyDetector(parEntry); break;
+                        case "UITextureMappingAsset": TextureMappingAssetDetector(parEntry); break;
                     }
                 }
             }
@@ -644,6 +650,43 @@ namespace BundleManager
             return bm_mvEntry.CheckVariationNeedsUpdating(parAsset, parRoot, meshAsest);
         }
 
+        private void TextureMappingAssetDetector(EbxAssetEntry parEntry)
+        {
+            if (parEntry.IsAdded)
+                return;
+
+            EbxAsset parAsset = AM.GetEbx(parEntry);
+            dynamic parRoot = parAsset.RootObject;
+            dynamic parRootOrig = AM.GetEbx(parEntry, true).RootObject;
+            List<ResourceRef> origTextureRefs = new List<ResourceRef>();
+            List<ResAssetEntry> newTextureEntries = new List<ResAssetEntry>();
+            foreach (dynamic mappingEntry in parRootOrig.Output)
+                origTextureRefs.Add(mappingEntry.TextureRef);
+            foreach (dynamic mappingEntry in parRoot.Output) {
+                if (!origTextureRefs.Contains(mappingEntry.TextureRef))
+                {
+                    ResourceRef texRef = mappingEntry.TextureRef;
+                    ResAssetEntry resEntry = AM.GetResEntry(texRef);
+                    if (resEntry != null)
+                    {
+                        LogString("Ebx-Res", "Dependency found", parEntry.Name, resEntry.Name);
+                        newTextureEntries.Add(resEntry);
+                    }
+                    else
+                    {
+                        App.Logger.LogWarning($"Res entry {texRef} could not be found in this project. Make sure to bundle this asset properly if referencing an external resource.");
+                        App.Logger.LogWarning($"Referenced in {parEntry.Name} Output[{parRoot.Output.IndexOf(mappingEntry)}]");
+                        LogString("Ebx-Res", "Dependency found", parEntry.Name, "Null Reference");
+                    }
+                }
+            }
+
+            if (newTextureEntries.Count != 0)
+            {
+                textureMappingSpecialCase.Add(parEntry, newTextureEntries);
+            }
+        }
+
 
 
         #endregion
@@ -823,6 +866,31 @@ namespace BundleManager
                 }
             }
 
+            //Loading mapped textures
+            foreach (EbxAssetEntry refEntry in textureMappingSpecialCase.Keys)
+            {
+                //App.Logger.Log("Checking texture mappings for " + refEntry.Name);
+                if (refEntry.IsInBundle(bunID) || (prerequisites.assetsAddedToBundles.ContainsKey(refEntry) && prerequisites.assetsAddedToBundles[refEntry].Select(o => App.AssetManager.GetBundleId(o)).Contains(bunID)))
+                {
+                    foreach (ResAssetEntry resEntry in textureMappingSpecialCase[refEntry])
+                    {
+                        EbxAssetEntry theTextureEntry = FindTextureEbxForRes(resEntry);
+                        CheckAddEbxToBundle(theTextureEntry);
+                        CheckAddResToBundle(resEntry);
+                    }
+                } else
+                {
+                    //App.Logger.Log("Skipping");
+                }
+            }
+            // reset after run
+            if (hasMissedTextureResCache)
+            {
+                //App.Logger.Log("Resetting ad hoc texture/res cache");
+                hasMissedTextureResCache = false;
+                uncachedTextureResMappings.Clear();
+            }
+
             //Methods
             bool IsLoaded(AssetEntry refEntry)
             {
@@ -999,6 +1067,41 @@ namespace BundleManager
                 if (logMessage)
                     LogString("Bundle", "Completing Network Registry", netregEntry.Name, NewNetworkRegistryReferences.Count.ToString() + " references added");
             }
+        }
+
+        private EbxAssetEntry FindTextureEbxForRes(ResAssetEntry resEntry)
+        {
+            if (resEntry == null)
+                return null;
+
+            if (BmCache.ResToEbxMappings.ContainsKey(resEntry))
+                return BmCache.ResToEbxMappings[resEntry];
+
+            // This is not a vanilla res id.
+            if (!hasMissedTextureResCache)
+            {
+                //App.Logger.Log("Cache miss");
+                // Only run this once per BM run
+                hasMissedTextureResCache = true;
+                foreach (EbxAssetEntry ebxEntry in AM.EnumerateEbx("TextureAsset", true))
+                {
+                    EbxAsset ebxAsset = AM.GetEbx(ebxEntry);
+                    dynamic ebxRoot = ebxAsset.RootObject;
+                    ResAssetEntry ebxRes = AM.GetResEntry(ebxRoot.Resource);
+                    uncachedTextureResMappings.Add(ebxRes, ebxEntry);
+                }
+            }
+
+            if (uncachedTextureResMappings.ContainsKey(resEntry))
+            {
+                //App.Logger.Log("Secondary cache hit");
+                return uncachedTextureResMappings[resEntry];
+            }
+
+            // impossible case; nonexistent res assets are handled in dependency detector
+            App.Logger.LogError("Something went wrong trying to find the ebx asset for " + resEntry.Name + "\nThis should be impossible, report this to AdamRaichu please.");
+
+            return null;
         }
 
         private List<int> GetAllowedBundles(List<int> levelBunIDs)
