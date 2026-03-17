@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using static BundleManager.MenuExtensions;
 
 namespace BundleManager
 {
@@ -90,17 +89,6 @@ namespace BundleManager
             [DisplayName("Whitelist bundles")]
             [Description("When a bundle manager enumeration is complete and you launch the game, only modifications made to the bundles you allowed the bundle manager to edit will be made. If you disabled the BM's ability to edit bpbs for example, they won't be modified when launching the game")]
             public bool BMO_WhitelistBundles { get; set; } = true;
-
-            [Category("General Options")]
-            [DisplayName("AutoBundle On Export")]
-            [Description("When enabled, automatically run the bundle manager on export. The type of bundles completed will default to 'Default AutoBundle Type', but will update to the last kind manually run in Tools > Bundle Manager.")]
-            public bool BMO_AutoBundleOnExport_Enabled { get; set; } = true;
-
-            [Category("General Options")]
-            [DisplayName("Default AutoBundle Type")]
-            [Description("This is the default type of bundles that will get automatically bundled when exporting with 'AutoBundle On Export' enabled.")]
-            [EbxFieldMeta(FrostySdk.IO.EbxFieldType.Enum)]
-            public BundleManagerRunType BMO_AutoBundleOnExport_DefaultRunType { get; set; } = BundleManagerRunType.Gameplay;
 
             [Category("Swbf2 Options")]
             [DisplayName("SP Campaign bundles")]
@@ -191,8 +179,6 @@ namespace BundleManager
                 BMO_CopyLinkedBundles = Config.Get<bool>("BMO_CopyLinkedBundles", true);
                 BMO_WhitelistBundles = Config.Get<bool>("BMO_WhitelistBundles", true);
                 BMO_IgnoreTocChunks = Config.Get<bool>("BMO_IgnoreTocChunks", false);
-                BMO_AutoBundleOnExport_Enabled = Config.Get<bool>("BMO_AutoBundleOnExport_Enabled", true);
-                BMO_AutoBundleOnExport_DefaultRunType = Config.Get<BundleManagerRunType>("BMO_AutoBundleOnExport_DefaultRunType", BundleManagerRunType.Gameplay);
                 BMO_Sublevel_SP = Config.Get<bool>("BMO_Sublevel_SP", false);
                 BMO_Sublevel_MP = Config.Get<bool>("BMO_Sublevel_MP", true);
                 BMO_LoadFrontendAnimations = Config.Get<bool>("BMO_LoadFrontendAnimations", false);
@@ -228,8 +214,6 @@ namespace BundleManager
                 Config.Add("BMO_CopyLinkedBundles", BMO_CopyLinkedBundles);
                 Config.Add("BMO_WhitelistBundles", BMO_WhitelistBundles);
                 Config.Add("BMO_IgnoreTocChunks", BMO_IgnoreTocChunks);
-                Config.Add("BMO_AutoBundleOnExport_Enabled", BMO_AutoBundleOnExport_Enabled);
-                Config.Add("BMO_AutoBundleOnExport_DefaultRunType", BMO_AutoBundleOnExport_DefaultRunType);
                 Config.Add("BMO_Sublevel_SP", BMO_Sublevel_SP);
                 Config.Add("BMO_Sublevel_MP", BMO_Sublevel_MP);
                 Config.Add("BMO_LoadFrontendAnimations", BMO_LoadFrontendAnimations);
