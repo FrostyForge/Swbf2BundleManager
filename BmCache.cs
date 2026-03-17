@@ -635,7 +635,10 @@ namespace BundleManager
                 ResAssetEntry resEntry = App.AssetManager.GetResEntry(parRoot.Resource);
                 lock (forLock)
                 {
-                    ResToEbxMappings.Add(resEntry, parEntry);
+                    if (resEntry != null)
+                    {
+                        ResToEbxMappings.Add(resEntry, parEntry);
+                    }
                     task.Update(progress: (forIdx++ / (double)forCount) * 100.0d);
                 }
             });

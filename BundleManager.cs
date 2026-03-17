@@ -1088,7 +1088,7 @@ namespace BundleManager
                     EbxAsset ebxAsset = AM.GetEbx(ebxEntry);
                     dynamic ebxRoot = ebxAsset.RootObject;
                     ResAssetEntry ebxRes = AM.GetResEntry(ebxRoot.Resource);
-                    uncachedTextureResMappings.Add(ebxRes, ebxEntry);
+                    uncachedTextureResMappings[ebxRes] = ebxEntry;
                 }
             }
 
