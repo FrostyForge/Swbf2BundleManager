@@ -38,4 +38,4 @@ using System.Windows;
 [assembly: RegisterMenuExtension(typeof(MenuExtensions.ExportPrerequisitsMenuExtension))]
 //[assembly: RegisterMenuExtension(typeof(MenuExtensions.TestBmAccuracyMenuExtension))]
 //[assembly: RegisterMenuExtension(typeof(CharacterDuplicatorMenuExtension))]
-
+[assembly: RegisterExecutionAction(typeof(MenuExtensions.AutoBundleManagerActions))]

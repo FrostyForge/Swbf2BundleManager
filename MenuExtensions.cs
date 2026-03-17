@@ -4,14 +4,18 @@ using Frosty.Core;
 using Frosty.Core.Controls;
 using Frosty.Core.Windows;
 using FrostySdk;
+using FrostySdk.Interfaces;
 using FrostySdk.Managers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
+using static BundleManager.BundleManagerOptionsMenu;
 
 namespace BundleManager
 {
@@ -41,7 +45,7 @@ namespace BundleManager
                     }
                 });
             });
-        
+
         }
 
         public class BundleManagerCosmeticMenuExtension : MenuExtension
@@ -80,9 +84,9 @@ namespace BundleManager
 
             public override RelayCommand MenuItemClicked => new RelayCommand((o) =>
             {
-            LevelBundlesPopup win = new LevelBundlesPopup();
-            if (win.ShowDialog() == false)
-                return;
+                LevelBundlesPopup win = new LevelBundlesPopup();
+                if (win.ShowDialog() == false)
+                    return;
 
                 string name = win.LevelName;
                 if (win.LevelName.Contains(" "))
@@ -139,9 +143,49 @@ namespace BundleManager
                         BundleManager BM = new BundleManager(task);
                         BM.ExportPrerequistis(sfd.FileName);
                     });
-                };
+                }
+                ;
             });
 
+        }
+
+        public enum BundleManagerRunType {
+            Gameplay,
+            Cosmetic,
+            Levels
+        }
+
+        public class AutoBundleManagerActions : ExecutionAction
+        {
+            public static BundleManagerRunType RunType = GetDefaultRunType();
+            private static BundleManagerRunType GetDefaultRunType()
+            {
+                BundleManagerOptions config = new BundleManagerOptions();
+                config.Load();
+                return config.BMO_AutoBundleOnExport_DefaultRunType;
+            }
+
+            public override Action<ILogger, PluginManagerType, CancellationToken> PreLaunchAction => (logger, managerType, _cancelToken) =>
+            {
+                if (!managerType.Equals(PluginManagerType.Editor))
+                {
+                    App.Logger.Log("Who thought it was a good idea to install the Bundle Manager in the Mod Manager?");
+                    return;
+                }
+
+                // TODO: Configure which kind of bundles to complete
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    FrostyTaskWindow.Show("Running Bundle Manager", "", (task) =>
+                    {
+                        if (BmCache.LoadCache(task))
+                        {
+                            BundleManager BM = new BundleManager(task);
+                            BM.CompleteBundleManage();
+                        }
+                    });
+                });
+            };
         }
     }
 }
