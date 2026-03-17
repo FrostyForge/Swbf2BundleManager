@@ -24,7 +24,7 @@ namespace BundleManager
     public static class BmCache
     {
         public static bool IsLoaded = false;
-        private static int BM_Version = 8;
+        private static int BM_Version = 9;
         private static AssetManager AM = App.AssetManager;
         private static Stopwatch stopWatch = new Stopwatch();
 
@@ -34,15 +34,16 @@ namespace BundleManager
         public static List<string> NetRegReferenceTypes = new List<string>();
         public static Dictionary<EbxAssetEntry, Dictionary<UInt32, MeshVariOriginalData>> MeshVariationEntries = new Dictionary<EbxAssetEntry, Dictionary<UInt32, MeshVariOriginalData>>();
         public static Dictionary<EbxAssetEntry, Dictionary<EbxAssetEntry, ResAssetEntry>> ObjectVariationPairs = new Dictionary<EbxAssetEntry, Dictionary<EbxAssetEntry, ResAssetEntry>>();
+        public static Dictionary<ResAssetEntry, EbxAssetEntry> ResToEbxMappings = new Dictionary<ResAssetEntry, EbxAssetEntry>();
         //public static Dictionary<ChunkAssetEntry, int> ChunkFirstMips = new Dictionary<ChunkAssetEntry, int>();
 
         private static int stageIdx = 1;
         private static Dictionary<int, int> gameStageCounts = new Dictionary<int, int>()
         {
-            {(int)ProfileVersion.StarWarsBattlefrontII, 7 },
-            {(int)ProfileVersion.StarWarsBattlefront, 4},
-            {(int)ProfileVersion.Battlefield5, 4},
-            {(int)ProfileVersion.Battlefield1, 4},
+            {(int)ProfileVersion.StarWarsBattlefrontII, 8 },
+            {(int)ProfileVersion.StarWarsBattlefront, 5},
+            {(int)ProfileVersion.Battlefield5, 5},
+            {(int)ProfileVersion.Battlefield1, 5},
         };
 
         public static bool LoadCache(FrostyTaskWindow task)
@@ -94,6 +95,7 @@ namespace BundleManager
             CreateCacheMeshVariationDatabase(task);
             LogAssetData(task);
             //CreateCacheEnumerateTextureFirstMips(task);
+            CreateCacheEnumerateTextureResId(task);
             ExportingCache(App.FileSystem.CacheName);
             stopWatch.Stop();
             App.Logger.Log(string.Format("Bundle Manager Cache generated in {0} seconds", stopWatch.Elapsed));
@@ -615,6 +617,35 @@ namespace BundleManager
 
         #endregion
 
+        #region Res -> EBX Texture Map
+
+        private static void CreateCacheEnumerateTextureResId(FrostyTaskWindow task)
+        {
+            LogUpdate(task, "Caching Texture Res/Ebx");
+            uint forCount = AM.GetEbxCount("TextureAsset");
+            uint forIdx = 0;
+            Parallel.ForEach(AM.EnumerateEbx(type: "TextureAsset"), parEntry =>
+            {
+                if (parEntry.IsAdded)
+                    return;
+
+                EbxAsset parAsset = AM.GetEbx(parEntry, true);
+                dynamic parRoot = parAsset.RootObject;
+
+                ResAssetEntry resEntry = App.AssetManager.GetResEntry(parRoot.Resource);
+                lock (forLock)
+                {
+                    if (resEntry != null)
+                    {
+                        ResToEbxMappings.Add(resEntry, parEntry);
+                    }
+                    task.Update(progress: (forIdx++ / (double)forCount) * 100.0d);
+                }
+            });
+        }
+
+        #endregion
+
         #region Firstmip
 
         //private static void CreateCacheEnumerateTextureFirstMips(FrostyTaskWindow task)
@@ -857,6 +888,9 @@ namespace BundleManager
                 foreach(ResAssetEntry resEntry in notLoggedRes)
                     writer.WriteLine(String.Format("{0}{1}", new string('\t', 1), resEntry.Name));
 
+                writer.WriteLine("Res to Ebx Mappings:");
+                foreach (ResAssetEntry resEntry in ResToEbxMappings.Keys)
+                    writer.WriteLine(String.Format("{0}{1} - {2}", new string('\t', 1), resEntry.Name, ResToEbxMappings[resEntry].Name));
                 //writer.WriteLine("Texture Chunk Firstmips:");
                 //foreach (ChunkAssetEntry chkEntry in ChunkFirstMips.Keys)
                 //    writer.WriteLine(String.Format("{0}{1} - {2}", new string('\t', 1), chkEntry.Name, ChunkFirstMips[chkEntry]));
@@ -871,6 +905,7 @@ namespace BundleManager
                 writer.Write(MeshVariationEntries.Count);
                 writer.Write(UnmodifiedAssetData.Count);
                 writer.Write(ObjectVariationPairs.Count);
+                writer.Write(ResToEbxMappings.Count);
                 //writer.Write(ChunkFirstMips.Count);
 
 
@@ -968,6 +1003,12 @@ namespace BundleManager
                     }
                 }
 
+                foreach (ResAssetEntry resEntry in ResToEbxMappings.Keys)
+                {
+                    writer.Write(resEntry.ResRid);
+                    writer.Write(ResToEbxMappings[resEntry].Guid);
+                }
+
                 //foreach (ChunkAssetEntry chkEntry in ChunkFirstMips.Keys)
                 //{
                 //    writer.Write(new Guid(chkEntry.Name));
@@ -979,6 +1020,7 @@ namespace BundleManager
                 MeshVariationEntries.Clear();
                 UnmodifiedAssetData.Clear();
                 ObjectVariationPairs.Clear();
+                ResToEbxMappings.Clear();
                 //ChunkFirstMips.Clear();
 
             }
@@ -1000,6 +1042,7 @@ namespace BundleManager
                 int mvdbEntriesCount = reader.ReadInt();
                 int unmodAssetDataCount = reader.ReadInt();
                 int objectvariationCount = reader.ReadInt();
+                int resToEbxCount = reader.ReadInt();
                 //int chunkfirstmipCount = reader.ReadInt();
 
                 for (int i = 0; i < bunParCount; i++)
@@ -1126,6 +1169,13 @@ namespace BundleManager
                         meshVars.Add(varMeshEntry, resAssetEntry);
                     }
                     ObjectVariationPairs.Add(varEntry, meshVars);
+                }
+
+                for (int i = 0; i < resToEbxCount; i++)
+                {
+                    ResAssetEntry resEntry = AM.GetResEntry(reader.ReadULong());
+                    EbxAssetEntry ebxEntry = AM.GetEbxEntry(reader.ReadGuid());
+                    ResToEbxMappings.Add(resEntry, ebxEntry);
                 }
 
                 //for (int i = 0; i < chunkfirstmipCount; i++)
